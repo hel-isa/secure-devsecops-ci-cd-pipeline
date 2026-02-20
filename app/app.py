@@ -13,6 +13,7 @@ log = logging.getLogger("secure-api")
 # Simple input validation
 SAFE_NAME = re.compile(r"^[a-zA-Z0-9_-]{1,40}$")
 
+
 @app.after_request
 def set_security_headers(resp):
     # Security headers (minimal example; customize for your needs)
@@ -25,9 +26,11 @@ def set_security_headers(resp):
     resp.headers["Permissions-Policy"] = "geolocation=(), microphone=(), camera=()"
     return resp
 
+
 @app.get("/health")
 def health():
     return jsonify(status="ok")
+
 
 @app.post("/hello")
 def hello():
@@ -38,11 +41,13 @@ def hello():
         return jsonify(error="Invalid name. Use 1-40 chars: letters, digits, _ or -"), 400
     return jsonify(message=f"Hello, {name}!")
 
+
 @app.errorhandler(Exception)
 def handle_exception(e):
     # Avoid leaking internals; log server-side
     log.exception("Unhandled exception")
     return jsonify(error="Internal server error"), 500
+
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=int(os.getenv("PORT", "8080")))

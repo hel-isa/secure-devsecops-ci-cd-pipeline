@@ -30,7 +30,10 @@ jobs:
       - name: Lint (ruff)
         run: |
           ruff check app
-          ruff format --check app
+
+      - name: Format check (ruff)
+        run: |
+          ruff format app --check --diff
 
       - name: Test (pytest)
         run: |
