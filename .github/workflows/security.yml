@@ -142,7 +142,7 @@ jobs:
         with:
           sarif_file: trivy-image.sarif
       - name: Grype image scan
-        uses: anchore/scan-action@v3
+        uses: anchore/scan-action@v7
         with:
           image: "secure-api:ci"
           fail-build: false
