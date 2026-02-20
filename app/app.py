@@ -34,7 +34,7 @@ def hello():
     payload = request.get_json(silent=True) or {}
     name = payload.get("name", "")
     if not isinstance(name, str) or not SAFE_NAME.match(name):
-        log.warning("Invalid input", extra={"name": str(name)[:80]})
+        log.warning("Invalid input", extra={"input_name": str(name)[:80]})
         return jsonify(error="Invalid name. Use 1-40 chars: letters, digits, _ or -"), 400
     return jsonify(message=f"Hello, {name}!")
 
