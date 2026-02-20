@@ -1,0 +1,30 @@
+name: Release (build, push, attest placeholders)
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  packages: write
+  id-token: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Login to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Build and push
+        run: |
+          IMAGE="ghcr.io/${{ github.repository_owner }}/secure-api:latest"
+          docker build -t "$IMAGE" .
+          docker push "$IMAGE"
+      - name: (Optional) Cosign sign (placeholder)
+        run: |
+          echo "Configure cosign + keyless signing here using OIDC."
+          echo "Example: cosign sign --yes $IMAGE"

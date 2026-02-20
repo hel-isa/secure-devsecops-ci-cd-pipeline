@@ -1,0 +1,9 @@
+title = "gitleaks config (portfolio)"
+[extend]
+useDefault = true
+
+[[allowlist]]
+description = "Allow dummy example tokens in docs"
+paths = [
+  '''THREAT_MODEL.md'''
+]

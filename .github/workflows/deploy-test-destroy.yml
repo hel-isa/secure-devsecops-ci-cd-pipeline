@@ -1,0 +1,108 @@
+name: Deploy, Test, and Destroy Kubernetes Environment
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  deploy-test:
+    runs-on: ubuntu-latest
+    
+    steps:
+      - uses: actions/checkout@v4
+      
+      # Create a local Kubernetes cluster using kind
+      - name: Set up kind cluster
+        uses: helm/kind-action@v1.10.0
+        with:
+          cluster_name: test-cluster
+          config: |
+            kind: Cluster
+            apiVersion: kind.x-k8s.io/v1alpha4
+            nodes:
+            - role: control-plane
+      
+      # Build and load Docker image into kind cluster
+      - name: Build and load Docker image
+        run: |
+          docker build -t ghcr.io/secure-api:test .
+          kind load docker-image ghcr.io/secure-api:test --name test-cluster
+      
+      # Update deployment manifest to use the local image
+      - name: Update deployment image
+        run: |
+          sed -i 's|ghcr.io/your-org/secure-api:latest|ghcr.io/secure-api:test|g' deploy/k8s/deployment.yaml
+          sed -i 's|imagePullPolicy: IfNotPresent|imagePullPolicy: Never|g' deploy/k8s/deployment.yaml || true
+      
+      # Deploy to kind cluster
+      - name: Deploy to Kubernetes
+        run: |
+          kubectl apply -f deploy/k8s/deployment.yaml
+          kubectl wait --for=condition=available --timeout=300s deployment/secure-api
+      
+      # Wait for pod to be ready and port-forward
+      - name: Port-forward and test API
+        run: |
+          kubectl get pods
+          kubectl port-forward deployment/secure-api 8080:8080 &
+          sleep 5
+          
+          # Test health endpoint
+          echo "Testing /health endpoint..."
+          curl -s http://localhost:8080/health | tee health-result.json
+          
+          # Test hello endpoint
+          echo -e "\n\nTesting /hello endpoint..."
+          curl -s -X POST http://localhost:8080/hello \
+            -H "Content-Type: application/json" \
+            -d '{"name": "GitHub_Actions"}' | tee hello-result.json
+          
+          # Test invalid input
+          echo -e "\n\nTesting invalid input (should return 400)..."
+          curl -s -X POST http://localhost:8080/hello \
+            -H "Content-Type: application/json" \
+            -d '{"name": "invalid name with spaces"}' | tee error-result.json
+      
+      # Print results
+      - name: Print test results
+        if: always()
+        run: |
+          echo "=== Health Check Result ==="
+          cat health-result.json
+          echo -e "\n\n=== Hello Endpoint Result ==="
+          cat hello-result.json
+          echo -e "\n\n=== Error Handling Result ==="
+          cat error-result.json
+      
+      # Get pod logs before cleanup
+      - name: Collect pod logs
+        if: always()
+        run: |
+          echo "=== Pod Logs ==="
+          kubectl logs deployment/secure-api
+      
+      # Get cluster info before cleanup
+      - name: Cluster status
+        if: always()
+        run: |
+          echo "=== Deployments ==="
+          kubectl get deployments
+          echo -e "\n=== Pods ==="
+          kubectl get pods
+          echo -e "\n=== Services ==="
+          kubectl get services
+      
+      # Cleanup: Delete deployment
+      - name: Cleanup deployment
+        if: always()
+        run: |
+          kubectl delete -f deploy/k8s/deployment.yaml || true
+          kubectl get pods
+      
+      # kind cluster is automatically destroyed when the runner terminates
+      - name: Cluster destroyed
+        if: always()
+        run: |
+          echo "kind cluster will be automatically destroyed at end of workflow"

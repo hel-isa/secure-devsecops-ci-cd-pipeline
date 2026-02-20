@@ -1,0 +1,167 @@
+name: Security (SAST, Secrets, Deps, IaC, Container, SBOM)
+
+on:
+  push:
+    branches: [ "main" ]
+  pull_request:
+  schedule:
+    - cron: "15 3 * * 1" # Mondays 03:15 UTC
+
+permissions:
+  contents: read
+  security-events: write
+
+jobs:
+  codeql:
+    name: CodeQL (SAST)
+    runs-on: ubuntu-latest
+    permissions:
+      actions: read
+      contents: read
+      security-events: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: github/codeql-action/init@v3
+        with:
+          languages: python
+      - uses: github/codeql-action/analyze@v3
+
+  semgrep:
+    name: Semgrep (SAST)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Run Semgrep (SARIF)
+        uses: semgrep/semgrep-action@v1
+        with:
+          config: p/ci
+          generateSarif: "1"
+      - name: Upload SARIF
+        uses: github/codeql-action/upload-sarif@v3
+        with:
+          sarif_file: semgrep.sarif
+
+  gitleaks:
+    name: Gitleaks (Secrets)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Run gitleaks
+        uses: gitleaks/gitleaks-action@v2
+        env:
+          GITLEAKS_ENABLE_UPLOAD_ARTIFACT: "false"
+
+  dependency_review:
+    name: Dependency Review (PR gate)
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/dependency-review-action@v4
+        with:
+          fail-on-severity: high
+
+  osv_scanner:
+    name: OSV-Scanner (Deps)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Run OSV-Scanner
+        uses: google/osv-scanner-action@v1
+        with:
+          scan-args: |
+            -r
+            .
+
+  pip_audit:
+    name: pip-audit (Python deps)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install pip-audit
+        run: python -m pip install pip-audit
+      - name: Audit
+        run: pip-audit -r app/requirements.txt
+
+  checkov:
+    name: Checkov (IaC)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Run Checkov
+        uses: bridgecrewio/checkov-action@v12
+        with:
+          directory: .
+          framework: terraform,kubernetes
+          soft_fail: true
+
+  trivy_fs:
+    name: Trivy (filesystem)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Trivy FS scan (SARIF)
+        uses: aquasecurity/trivy-action@0.24.0
+        with:
+          scan-type: "fs"
+          format: "sarif"
+          output: "trivy-fs.sarif"
+          severity: "CRITICAL,HIGH"
+          ignore-unfixed: true
+      - name: Upload SARIF
+        uses: github/codeql-action/upload-sarif@v3
+        with:
+          sarif_file: trivy-fs.sarif
+
+  container_build_scan:
+    name: Build + Scan container (Trivy + Grype)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build image
+        run: |
+          docker build -t secure-api:ci .
+      - name: Trivy image scan (SARIF)
+        uses: aquasecurity/trivy-action@0.24.0
+        with:
+          image-ref: "secure-api:ci"
+          format: "sarif"
+          output: "trivy-image.sarif"
+          severity: "CRITICAL,HIGH"
+          ignore-unfixed: true
+      - name: Upload SARIF
+        uses: github/codeql-action/upload-sarif@v3
+        with:
+          sarif_file: trivy-image.sarif
+      - name: Grype image scan
+        uses: anchore/scan-action@v3
+        with:
+          image: "secure-api:ci"
+          fail-build: false
+          output-format: "table"
+
+  sbom:
+    name: SBOM (CycloneDX)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Generate SBOM
+        run: |
+          python -m pip install -r app/requirements-dev.txt
+          bash scripts/generate_sbom.sh
+      - name: Upload SBOM artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: sbom
+          path: sbom/*.json
