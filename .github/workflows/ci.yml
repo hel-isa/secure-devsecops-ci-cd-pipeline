@@ -32,4 +32,4 @@ jobs:
           ruff check app
           ruff format --check app
       - name: Test (pytest)
-        run: pytest -q
+        run: PYTHONPATH=. pytest -q
