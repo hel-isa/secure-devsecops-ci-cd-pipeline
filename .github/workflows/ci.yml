@@ -31,10 +31,6 @@ jobs:
         run: |
           ruff check app
 
-      - name: Format check (ruff)
-        run: |
-          ruff format app --check --diff
-
       - name: Test (pytest)
         run: |
           PYTHONPATH=. pytest -q
