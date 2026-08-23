@@ -109,7 +109,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: Trivy FS scan (SARIF)
-        uses: aquasecurity/trivy-action@0.24.0
+        uses: aquasecurity/trivy-action@v0.36.0
         with:
           scan-type: "fs"
           format: "sarif"
@@ -130,7 +130,7 @@ jobs:
         run: |
           docker build -t secure-api:ci .
       - name: Trivy image scan (SARIF)
-        uses: aquasecurity/trivy-action@0.24.0
+        uses: aquasecurity/trivy-action@v0.36.0
         with:
           image-ref: "secure-api:ci"
           format: "sarif"
